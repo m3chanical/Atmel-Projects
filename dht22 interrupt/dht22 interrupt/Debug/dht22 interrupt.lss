@@ -3,25 +3,25 @@ dht22 interrupt.elf:     file format elf32-avr
 
 Sections:
 Idx Name          Size      VMA       LMA       File off  Algn
-  0 .text         0000010a  00000000  00000000  00000054  2**1
+  0 .text         00000162  00000000  00000000  00000054  2**1
                   CONTENTS, ALLOC, LOAD, READONLY, CODE
-  1 .comment      00000030  00000000  00000000  0000015e  2**0
+  1 .comment      00000030  00000000  00000000  000001b6  2**0
                   CONTENTS, READONLY
-  2 .debug_aranges 00000030  00000000  00000000  0000018e  2**0
+  2 .debug_aranges 00000038  00000000  00000000  000001e6  2**0
                   CONTENTS, READONLY, DEBUGGING
-  3 .debug_info   000001a8  00000000  00000000  000001be  2**0
+  3 .debug_info   00000314  00000000  00000000  0000021e  2**0
                   CONTENTS, READONLY, DEBUGGING
-  4 .debug_abbrev 00000129  00000000  00000000  00000366  2**0
+  4 .debug_abbrev 00000173  00000000  00000000  00000532  2**0
                   CONTENTS, READONLY, DEBUGGING
-  5 .debug_line   00000169  00000000  00000000  0000048f  2**0
+  5 .debug_line   0000019e  00000000  00000000  000006a5  2**0
                   CONTENTS, READONLY, DEBUGGING
-  6 .debug_frame  00000058  00000000  00000000  000005f8  2**2
+  6 .debug_frame  0000009c  00000000  00000000  00000844  2**2
                   CONTENTS, READONLY, DEBUGGING
-  7 .debug_str    000001c6  00000000  00000000  00000650  2**0
+  7 .debug_str    000001e9  00000000  00000000  000008e0  2**0
                   CONTENTS, READONLY, DEBUGGING
-  8 .debug_loc    00000049  00000000  00000000  00000816  2**0
+  8 .debug_loc    000001d0  00000000  00000000  00000ac9  2**0
                   CONTENTS, READONLY, DEBUGGING
-  9 .debug_ranges 00000020  00000000  00000000  0000085f  2**0
+  9 .debug_ranges 00000028  00000000  00000000  00000c99  2**0
                   CONTENTS, READONLY, DEBUGGING
 
 Disassembly of section .text:
@@ -38,7 +38,7 @@ Disassembly of section .text:
   20:	0c 94 46 00 	jmp	0x8c	; 0x8c <__bad_interrupt>
   24:	0c 94 46 00 	jmp	0x8c	; 0x8c <__bad_interrupt>
   28:	0c 94 46 00 	jmp	0x8c	; 0x8c <__bad_interrupt>
-  2c:	0c 94 71 00 	jmp	0xe2	; 0xe2 <__vector_11>
+  2c:	0c 94 8b 00 	jmp	0x116	; 0x116 <__vector_11>
   30:	0c 94 46 00 	jmp	0x8c	; 0x8c <__bad_interrupt>
   34:	0c 94 46 00 	jmp	0x8c	; 0x8c <__bad_interrupt>
   38:	0c 94 46 00 	jmp	0x8c	; 0x8c <__bad_interrupt>
@@ -75,8 +75,8 @@ Disassembly of section .text:
   7e:	a0 30       	cpi	r26, 0x00	; 0
   80:	b2 07       	cpc	r27, r18
   82:	e1 f7       	brne	.-8      	; 0x7c <.do_clear_bss_loop>
-  84:	0e 94 61 00 	call	0xc2	; 0xc2 <main>
-  88:	0c 94 83 00 	jmp	0x106	; 0x106 <_exit>
+  84:	0e 94 60 00 	call	0xc0	; 0xc0 <main>
+  88:	0c 94 af 00 	jmp	0x15e	; 0x15e <_exit>
 
 0000008c <__bad_interrupt>:
   8c:	0c 94 00 00 	jmp	0	; 0x0 <__vectors>
@@ -112,86 +112,167 @@ void init(){
   b4:	82 60       	ori	r24, 0x02	; 2
   b6:	80 83       	st	Z, r24
 	
-	sei();
-  b8:	78 94       	sei
+	// TODO: enable port B pins as output for binary LEDs. (future, use shift register maybe?);
+	DDRB |= (1 << SENSOR_PIN);
+  b8:	20 9a       	sbi	0x04, 0	; 4
+	PORTB |= (1 << SENSOR_PIN); //Set Sensor pin as output, and pull it high.
+  ba:	28 9a       	sbi	0x05, 0	; 5
 	
-	// Set the following B pins as output:
-	DDRB |= ((1 << DDB0) | (1 << DDB1) | (1 << DDB2) | (1 << DDB3) | (1 << DDB4));
-  ba:	84 b1       	in	r24, 0x04	; 4
-  bc:	8f 61       	ori	r24, 0x1F	; 31
-  be:	84 b9       	out	0x04, r24	; 4
-  c0:	08 95       	ret
+	sei(); // Re-enable interrupts!
+  bc:	78 94       	sei
+  be:	08 95       	ret
 
-000000c2 <main>:
+000000c0 <main>:
 volatile uint16_t dht_humidity; // Bytes 0 & 1 of the received data divided by 10
 volatile uint16_t dht_temp; // Bytes 2 & 3 of received data divided by 10
 
 int main(void)
 {
 	init(); // Initialize the chip: 
-  c2:	0e 94 48 00 	call	0x90	; 0x90 <init>
-	*/
+  c0:	0e 94 48 00 	call	0x90	; 0x90 <init>
+  c4:	ff cf       	rjmp	.-2      	; 0xc4 <main+0x4>
+
+000000c6 <dht22_read>:
+
+	//OUTPUT: low for 1-10ms, then high
+	//INPUT: sensor pulls low for 80us, then high for 80us. then data transmission starts:
 	
-    while(1)
-    {
-		_delay_ms(1000); // This is to make sure I got my clock frequency correct with the F_CPU macro.
-		PORTB ^= (1 << DDB0);
-  c6:	91 e0       	ldi	r25, 0x01	; 1
+	// OUTPUT: 
+	DDRB |= (1 << SENSOR_PIN); // Ensure DHT22 pin set as output: 
+  c6:	20 9a       	sbi	0x04, 0	; 4
+	PORTB |= (0 << SENSOR_PIN); // Set sensor pin low for 1-10ms:
+  c8:	85 b1       	in	r24, 0x05	; 5
+  ca:	85 b9       	out	0x05, r24	; 5
 	#else
 		//round up by default
 		__ticks_dc = (uint32_t)(ceil(fabs(__tmp)));
 	#endif
 
 	__builtin_avr_delay_cycles(__ticks_dc);
-  c8:	2f ef       	ldi	r18, 0xFF	; 255
-  ca:	33 ed       	ldi	r19, 0xD3	; 211
-  cc:	80 e3       	ldi	r24, 0x30	; 48
-  ce:	21 50       	subi	r18, 0x01	; 1
-  d0:	30 40       	sbci	r19, 0x00	; 0
-  d2:	80 40       	sbci	r24, 0x00	; 0
-  d4:	e1 f7       	brne	.-8      	; 0xce <main+0xc>
-  d6:	00 c0       	rjmp	.+0      	; 0xd8 <main+0x16>
-  d8:	00 00       	nop
-  da:	85 b1       	in	r24, 0x05	; 5
-  dc:	89 27       	eor	r24, r25
-  de:	85 b9       	out	0x05, r24	; 5
-  e0:	f3 cf       	rjmp	.-26     	; 0xc8 <main+0x6>
+  cc:	8f e3       	ldi	r24, 0x3F	; 63
+  ce:	9f e1       	ldi	r25, 0x1F	; 31
+  d0:	01 97       	sbiw	r24, 0x01	; 1
+  d2:	f1 f7       	brne	.-4      	; 0xd0 <dht22_read+0xa>
+  d4:	00 c0       	rjmp	.+0      	; 0xd6 <dht22_read+0x10>
+  d6:	00 00       	nop
+	_delay_ms(2); //low for 2ms
+	PORTB |= (1 << SENSOR_PIN);
+  d8:	28 9a       	sbi	0x05, 0	; 5
+	#else
+		//round up by default
+		__ticks_dc = (uint32_t)(ceil(fabs(__tmp)));
+	#endif
 
-000000e2 <__vector_11>:
+	__builtin_avr_delay_cycles(__ticks_dc);
+  da:	90 ea       	ldi	r25, 0xA0	; 160
+  dc:	9a 95       	dec	r25
+  de:	f1 f7       	brne	.-4      	; 0xdc <dht22_read+0x16>
+	_delay_us(30); //high for 20-40us; 
+	// INPUT: 
+	DDRB &= ~(1 << SENSOR_PIN); // set sensor pin as input.
+  e0:	20 98       	cbi	0x04, 0	; 4
+  e2:	e5 ed       	ldi	r30, 0xD5	; 213
+  e4:	ea 95       	dec	r30
+  e6:	f1 f7       	brne	.-4      	; 0xe4 <dht22_read+0x1e>
+  e8:	00 00       	nop
+  ea:	8f ee       	ldi	r24, 0xEF	; 239
+  ec:	90 e0       	ldi	r25, 0x00	; 0
+  ee:	01 97       	sbiw	r24, 0x01	; 1
+  f0:	f1 f7       	brne	.-4      	; 0xee <dht22_read+0x28>
+  f2:	00 c0       	rjmp	.+0      	; 0xf4 <dht22_read+0x2e>
+  f4:	00 00       	nop
+  f6:	95 e0       	ldi	r25, 0x05	; 5
 	
-	// Set the following B pins as output:
-	DDRB |= ((1 << DDB0) | (1 << DDB1) | (1 << DDB2) | (1 << DDB3) | (1 << DDB4));
+	sei(); // Re-enable interrupts!
+	
+}
+
+void dht22_read(){
+  f8:	28 e0       	ldi	r18, 0x08	; 8
+  fa:	0a c0       	rjmp	.+20     	; 0x110 <dht22_read+0x4a>
+  fc:	e7 ec       	ldi	r30, 0xC7	; 199
+  fe:	f0 e0       	ldi	r31, 0x00	; 0
+ 100:	31 97       	sbiw	r30, 0x01	; 1
+ 102:	f1 f7       	brne	.-4      	; 0x100 <dht22_read+0x3a>
+ 104:	00 c0       	rjmp	.+0      	; 0x106 <dht22_read+0x40>
+ 106:	00 00       	nop
+ 108:	81 50       	subi	r24, 0x01	; 1
+	/* FOR LOOPS read temperature and humidity date in from sensor. */
+	for (uint8_t b = 0; b < 5; b++) { // Reading a total of five bytes from the sensor
+		
+		rcv_byte = 0; 
+		
+		for(uint8_t i = 0; i < 8; i++){ // 8 bits.
+ 10a:	c1 f7       	brne	.-16     	; 0xfc <dht22_read+0x36>
+ 10c:	91 50       	subi	r25, 0x01	; 1
+		return;
+	}
+	// Sensor then pulls low for 80us, then high for 80us.
+
+	/* FOR LOOPS read temperature and humidity date in from sensor. */
+	for (uint8_t b = 0; b < 5; b++) { // Reading a total of five bytes from the sensor
+ 10e:	11 f0       	breq	.+4      	; 0x114 <dht22_read+0x4e>
+	
+	sei(); // Re-enable interrupts!
+	
+}
+
+void dht22_read(){
+ 110:	82 2f       	mov	r24, r18
+ 112:	f4 cf       	rjmp	.-24     	; 0xfc <dht22_read+0x36>
+ 114:	08 95       	ret
+
+00000116 <__vector_11>:
+			_delay_us(50);		
+		}
+	}
 }
 
 ISR(TIMER1_COMPA_vect) {
-  e2:	1f 92       	push	r1
-  e4:	0f 92       	push	r0
-  e6:	0f b6       	in	r0, 0x3f	; 63
-  e8:	0f 92       	push	r0
-  ea:	11 24       	eor	r1, r1
-  ec:	8f 93       	push	r24
-  ee:	9f 93       	push	r25
+ 116:	1f 92       	push	r1
+ 118:	0f 92       	push	r0
+ 11a:	0f b6       	in	r0, 0x3f	; 63
+ 11c:	0f 92       	push	r0
+ 11e:	11 24       	eor	r1, r1
+ 120:	2f 93       	push	r18
+ 122:	3f 93       	push	r19
+ 124:	4f 93       	push	r20
+ 126:	5f 93       	push	r21
+ 128:	6f 93       	push	r22
+ 12a:	7f 93       	push	r23
+ 12c:	8f 93       	push	r24
+ 12e:	9f 93       	push	r25
+ 130:	af 93       	push	r26
+ 132:	bf 93       	push	r27
+ 134:	ef 93       	push	r30
+ 136:	ff 93       	push	r31
+	
 		/* This triggers every two seconds based on the math in the init function. 
 			- Purpose: Perform a read on the DHT22 sensor. 
-			- 
+			- Read function of sensor is called.
 		*/
-		
-		PORTB ^= ((1 << DDB1) | (1 << DDB2) | (1 << DDB3) | (1 << DDB4));
-  f0:	95 b1       	in	r25, 0x05	; 5
-  f2:	8e e1       	ldi	r24, 0x1E	; 30
-  f4:	89 27       	eor	r24, r25
-  f6:	85 b9       	out	0x05, r24	; 5
-		
-  f8:	9f 91       	pop	r25
-  fa:	8f 91       	pop	r24
-  fc:	0f 90       	pop	r0
-  fe:	0f be       	out	0x3f, r0	; 63
- 100:	0f 90       	pop	r0
- 102:	1f 90       	pop	r1
- 104:	18 95       	reti
+		dht22_read();
+ 138:	0e 94 63 00 	call	0xc6	; 0xc6 <dht22_read>
+ 13c:	ff 91       	pop	r31
+ 13e:	ef 91       	pop	r30
+ 140:	bf 91       	pop	r27
+ 142:	af 91       	pop	r26
+ 144:	9f 91       	pop	r25
+ 146:	8f 91       	pop	r24
+ 148:	7f 91       	pop	r23
+ 14a:	6f 91       	pop	r22
+ 14c:	5f 91       	pop	r21
+ 14e:	4f 91       	pop	r20
+ 150:	3f 91       	pop	r19
+ 152:	2f 91       	pop	r18
+ 154:	0f 90       	pop	r0
+ 156:	0f be       	out	0x3f, r0	; 63
+ 158:	0f 90       	pop	r0
+ 15a:	1f 90       	pop	r1
+ 15c:	18 95       	reti
 
-00000106 <_exit>:
- 106:	f8 94       	cli
+0000015e <_exit>:
+ 15e:	f8 94       	cli
 
-00000108 <__stop_program>:
- 108:	ff cf       	rjmp	.-2      	; 0x108 <__stop_program>
+00000160 <__stop_program>:
+ 160:	ff cf       	rjmp	.-2      	; 0x160 <__stop_program>

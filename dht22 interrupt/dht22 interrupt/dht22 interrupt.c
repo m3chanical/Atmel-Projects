@@ -6,6 +6,7 @@
  */ 
 
 #define F_CPU 16000000UL
+#define SENSOR_PIN DDB0
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -13,8 +14,9 @@
 
 // Function Prototypes:
 void init();
+void dht22_read();
 
-volatile uint8_t data[5]; // Five bytes for received data from DHT22 Sensor. 5th byte is checksum. 
+ 
 volatile uint16_t dht_humidity; // Bytes 0 & 1 of the received data divided by 10
 volatile uint16_t dht_temp; // Bytes 2 & 3 of received data divided by 10
 
@@ -24,26 +26,12 @@ int main(void)
 			//		- Set an interrupt for every two seconds
 			//		- Set Port B pins as OUTPUT
 			//		- That's it.
-			
-	/* In ISR: 
-		- Write DHT22 routine.
-		- Can only read every two seconds (hence interrupt) 
-		- Or maybe it can? I'll check the datasheet.
-	*/
 	
-	/* To write driver for DHT22:
-		- need microsecond timing. use _delay_us function, because it's easy for now.
-		- will receive 5 bytes of data (40 bits) 
-			- First two bytes: Humidity
-			- Second two bytes: Temperature in C
-			- Final byte: Check sum (addition of all other bytes)
-		- change pin to output and input dynamically. ( time to change ? )  
-	*/
+
 	
     while(1)
     {
-		_delay_ms(1000); // This is to make sure I got my clock frequency correct with the F_CPU macro.
-		PORTB ^= (1 << DDB0);
+		
     }
 }
 
@@ -56,19 +44,60 @@ void init(){
 	TCCR1B |= (1 << WGM12); // Timer/Counter1 in clear timer on compare mode
 	TIMSK1 |= (1 << OCIE1A); // Enable timer compare interrupt
 	
-	sei();
+	// TODO: enable port B pins as output for binary LEDs. (future, use shift register maybe?);
+	DDRB |= (1 << SENSOR_PIN);
+	PORTB |= (1 << SENSOR_PIN); //Set Sensor pin as output, and pull it high.
 	
-	// Set the following B pins as output:
-	DDRB |= ((1 << DDB0) | (1 << DDB1) | (1 << DDB2) | (1 << DDB3) | (1 << DDB4));
+	sei(); // Re-enable interrupts!
+	
+}
+
+void dht22_read(){
+	uint8_t data[5]; // Five bytes for received data from DHT22 Sensor. 5th byte is checksum.
+	uint8_t rcv_byte; // Current byte being received. Will be added to the data[] array after loop.
+	
+	/* INITIALIZING Sensor: */
+
+	//OUTPUT: low for 1-10ms, then high
+	//INPUT: sensor pulls low for 80us, then high for 80us. then data transmission starts:
+	
+	// OUTPUT: 
+	DDRB |= (1 << SENSOR_PIN); // Ensure DHT22 pin set as output: 
+	PORTB |= (0 << SENSOR_PIN); // Set sensor pin low for 1-10ms:
+	_delay_ms(2); //low for 2ms
+	PORTB |= (1 << SENSOR_PIN);
+	_delay_us(30); //high for 20-40us; 
+	// INPUT: 
+	DDRB &= ~(1 << SENSOR_PIN); // set sensor pin as input.
+	_delay_us(40); // in middle of expected low from sensor: 
+	if(PINB0 & 1){
+		// something went wrong. flash leds maybe? I dunno.
+		return;
+	}
+	_delay_us(60) ; // should be in the middle of the high signal from sensor
+	if(PINB0 & 0){
+		// something went wrong. cry yourself to sleep
+		return;
+	}
+	// Sensor then pulls low for 80us, then high for 80us.
+
+	/* FOR LOOPS read temperature and humidity date in from sensor. */
+	for (uint8_t b = 0; b < 5; b++) { // Reading a total of five bytes from the sensor
+		
+		rcv_byte = 0; 
+		
+		for(uint8_t i = 0; i < 8; i++){ // 8 bits.
+			// before each data bit, sensor drops low for 50us
+			_delay_us(50);		
+		}
+	}
 }
 
 ISR(TIMER1_COMPA_vect) {
 	
 		/* This triggers every two seconds based on the math in the init function. 
 			- Purpose: Perform a read on the DHT22 sensor. 
-			- 
+			- Read function of sensor is called.
 		*/
-		
-		PORTB ^= ((1 << DDB1) | (1 << DDB2) | (1 << DDB3) | (1 << DDB4));
-		
+		dht22_read();
 }
